@@ -60,6 +60,8 @@ const (
 	controllerAnnotationValue = "dns-controller"
 	// The annotation used for defining the desired hostname
 	internalHostnameAnnotationKey = "external-dns.alpha.kubernetes.io/internal-hostname"
+        // The annotation used for exporting endpoint for service with ClusterIP
+	exportEndpointAnnotationKey = "external-dns.alpha.kubernetes.io/export-endpoint"
 )
 
 const (
@@ -179,6 +181,11 @@ func getInternalHostnamesFromAnnotations(annotations map[string]string) []string
 
 func splitHostnameAnnotation(annotation string) []string {
 	return strings.Split(strings.Replace(annotation, " ", "", -1), ",")
+}
+
+func getExportEndpointFromAnnotations(annotations map[string]string) bool {
+        exportEndpointAnnotation, exists := annotations[exportEndpointAnnotationKey]
+        return exists && exportEndpointAnnotation == "true"
 }
 
 func getAliasFromAnnotations(annotations map[string]string) bool {
