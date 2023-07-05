@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	sdDefaultRecordTTL = 300
+	sdDefaultRecordTTL = 15
 
 	sdNamespaceTypePublic  = "public"
 	sdNamespaceTypePrivate = "private"
@@ -234,25 +234,19 @@ func (p *AWSSDProvider) ApplyChanges(ctx context.Context, changes *plan.Changes)
 	creates, deletes := p.updatesToCreates(changes)
 	changes.Delete = append(changes.Delete, deletes...)
 	changes.Create = append(changes.Create, creates...)
-
+	dedupedCreate, dedupedDelete := p.DedupDeletesAndCreates(changes.Create, changes.Delete)
+	
 	namespaces, err := p.ListNamespaces()
 	if err != nil {
 		return err
 	}
 
-	// Deletes must be executed first to support update case.
-	// When just list of targets is updated `[1.2.3.4] -> [1.2.3.4, 1.2.3.5]` it is translated to:
-	// ```
-	// deletes = [1.2.3.4]
-	// creates = [1.2.3.4, 1.2.3.5]
-	// ```
-	// then when deletes are executed after creates it will miss the `1.2.3.4` instance.
-	err = p.submitDeletes(namespaces, changes.Delete)
+	err = p.submitDeletes(namespaces, dedupedDelete)
 	if err != nil {
 		return err
 	}
 
-	err = p.submitCreates(namespaces, changes.Create)
+	err = p.submitCreates(namespaces, dedupedCreate)
 	if err != nil {
 		return err
 	}
@@ -276,6 +270,76 @@ func (p *AWSSDProvider) updatesToCreates(changes *plan.Changes) (creates []*endp
 
 		// always register (or re-register) instance with the current data
 		creates = append(creates, current)
+	}
+
+	return creates, deletes
+}
+
+// DedupDeletesAndCreates removes targets that appear identically as both deletes and creates.
+// These targets are redundant and result in overlapping API calls. Without deduplication, RegisterInstance could be
+// invoked while DeregisterInstance is still in progress in AWS, resulting in failure to register the instance, and
+// therefore in service disruption. Redundant targets may have been introduced by updatesToCreates or srvChangesHostnameToIP.
+// Code is from https://github.com/kubernetes-sigs/external-dns/pull/1911
+func (p *AWSSDProvider) DedupDeletesAndCreates(creates []*endpoint.Endpoint, deletes []*endpoint.Endpoint) ([]*endpoint.Endpoint, []*endpoint.Endpoint) {
+	// contains all targets appearing in "deletes", mapped by the DNS name of the respective endpoint
+	targetsByDeleteEp := map[string]map[string]bool{}
+	// contains all duplicate targets (appearing in both "deletes" and "creates"), mapped by the DNS name of the respective endpoint
+	dupTargetsByEp := map[string]map[string]bool{}
+
+	// populate targetsByDeleteEp
+	for _, e := range deletes {
+		if targetsByDeleteEp[e.DNSName] == nil {
+			targetsByDeleteEp[e.DNSName] = map[string]bool{}
+		}
+		for _, t := range e.Targets {
+			if _, ok := targetsByDeleteEp[e.DNSName][t]; !ok {
+				targetsByDeleteEp[e.DNSName][t] = true
+			}
+		}
+	}
+
+	// loop create endpoints and remove duplicate targets
+	for _, create := range creates {
+		// if no delete endpoint for this DNS name, then skip this endpoint
+		if targetsByDeleteEp[create.DNSName] == nil {
+			continue
+		}
+		TargetsDelete := targetsByDeleteEp[create.DNSName]
+		// i is the length of the deduplicated targets for the endpoint (initial targets count - duplicate targets count)
+		i := 0
+		// loop all targets in this endpoint
+		for _, createTarget := range create.Targets {
+			// if the target is not duplicate
+			if _, ok := TargetsDelete[createTarget]; !ok {
+				// copy the target and increment i
+				create.Targets[i] = createTarget
+				i++
+				// if the target is duplicate, add it to dupTargetsByEp
+			} else {
+				if dupTargetsByEp[create.DNSName] == nil {
+					dupTargetsByEp[create.DNSName] = map[string]bool{}
+				}
+				dupTargetsByEp[create.DNSName][createTarget] = true
+			}
+		}
+		// cut the slice up to i (count of deduplicated targets)
+		create.Targets = create.Targets[:i]
+	}
+
+	// loop delete endpoints and remove duplicate targets
+	for _, delete := range deletes {
+		if dupTargetsByEp[delete.DNSName] == nil {
+			continue
+		}
+		TargetsDup := dupTargetsByEp[delete.DNSName]
+		i := 0
+		for _, deleteTarget := range delete.Targets {
+			if _, ok := TargetsDup[deleteTarget]; !ok {
+				delete.Targets[i] = deleteTarget
+				i++
+			}
+		}
+		delete.Targets = delete.Targets[:i]
 	}
 
 	return creates, deletes
