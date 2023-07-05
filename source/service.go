@@ -223,7 +223,7 @@ func (sc *serviceSource) Endpoints(ctx context.Context) ([]*endpoint.Endpoint, e
 				mergedEndpoints[lastMergedEndpoint].RecordType == endpoints[i].RecordType &&
 				mergedEndpoints[lastMergedEndpoint].SetIdentifier == endpoints[i].SetIdentifier &&
 				mergedEndpoints[lastMergedEndpoint].RecordTTL == endpoints[i].RecordTTL {
-				mergedEndpoints[lastMergedEndpoint].Targets = append(mergedEndpoints[lastMergedEndpoint].Targets, endpoints[i].Targets[0])
+				mergedEndpoints[lastMergedEndpoint].Targets = append(mergedEndpoints[lastMergedEndpoint].Targets, endpoints[i].Targets...)
 			} else {
 				mergedEndpoints = append(mergedEndpoints, endpoints[i])
 			}
@@ -286,7 +286,7 @@ func (sc *serviceSource) extractHeadlessEndpoints(svc *v1.Service, hostname stri
 				}
 			}
 			if pod == nil {
-				log.Errorf("Pod %s not found for address %v", address.TargetRef.Name, address)
+				log.Debugf("Pod %s not found for address %v", address.TargetRef.Name, address)
 				continue
 			}
 
@@ -363,9 +363,9 @@ func (sc *serviceSource) endpointsFromTemplate(svc *v1.Service) ([]*endpoint.End
 
 	var endpoints []*endpoint.Endpoint
 	for _, hostname := range hostnames {
-		endpoints = append(endpoints, sc.generateEndpoints(svc, hostname, providerSpecific, setIdentifier, false)...)
-	}
-
+		endpoints = append(endpoints, sc.generateEndpoints(svc, hostname, providerSpecific, setIdentifier, false, false)...)
+        }
+	
 	return endpoints, nil
 }
 
@@ -377,15 +377,16 @@ func (sc *serviceSource) endpoints(svc *v1.Service) []*endpoint.Endpoint {
 		providerSpecific, setIdentifier := getProviderSpecificAnnotations(svc.Annotations)
 		var hostnameList []string
 		var internalHostnameList []string
+		var exportEndpointForClusterIP bool = getExportEndpointFromAnnotations(svc.Annotations)
 
 		hostnameList = getHostnamesFromAnnotations(svc.Annotations)
 		for _, hostname := range hostnameList {
-			endpoints = append(endpoints, sc.generateEndpoints(svc, hostname, providerSpecific, setIdentifier, false)...)
+			endpoints = append(endpoints, sc.generateEndpoints(svc, hostname, providerSpecific, setIdentifier, false, exportEndpointForClusterIP)...)
 		}
 
 		internalHostnameList = getInternalHostnamesFromAnnotations(svc.Annotations)
 		for _, hostname := range internalHostnameList {
-			endpoints = append(endpoints, sc.generateEndpoints(svc, hostname, providerSpecific, setIdentifier, true)...)
+			endpoints = append(endpoints, sc.generateEndpoints(svc, hostname, providerSpecific, setIdentifier, true, exportEndpointForClusterIP)...)
 		}
 	}
 	return endpoints
@@ -441,7 +442,7 @@ func (sc *serviceSource) setResourceLabel(service *v1.Service, endpoints []*endp
 	}
 }
 
-func (sc *serviceSource) generateEndpoints(svc *v1.Service, hostname string, providerSpecific endpoint.ProviderSpecific, setIdentifier string, useClusterIP bool) []*endpoint.Endpoint {
+func (sc *serviceSource) generateEndpoints(svc *v1.Service, hostname string, providerSpecific endpoint.ProviderSpecific, setIdentifier string, useClusterIP bool, exportEndpointForClusterIP bool) []*endpoint.Endpoint {
 	hostname = strings.TrimSuffix(hostname, ".")
 	ttl, err := getTTLFromAnnotations(svc.Annotations)
 	if err != nil {
@@ -478,7 +479,7 @@ func (sc *serviceSource) generateEndpoints(svc *v1.Service, hostname string, pro
 		if sc.publishInternal {
 			targets = append(targets, extractServiceIps(svc)...)
 		}
-		if svc.Spec.ClusterIP == v1.ClusterIPNone {
+		if svc.Spec.ClusterIP == v1.ClusterIPNone || exportEndpointForClusterIP {
 			endpoints = append(endpoints, sc.extractHeadlessEndpoints(svc, hostname, ttl)...)
 		}
 	case v1.ServiceTypeNodePort:
