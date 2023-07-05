@@ -216,7 +216,7 @@ Consult [AWS ExternalDNS setup docs](aws.md) for installation guidelines.
 In ExternalDNS containers args, make sure to specify `aws-zone-type` and `ingress-class`:
 
 ```yaml
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -243,7 +243,7 @@ spec:
         - --txt-owner-id=external-dns
         - --ingress-class=external-ingress
         - --aws-zone-type=public
-        image: registry.k8s.io/external-dns/external-dns:v0.13.4
+        image: registry.k8s.io/external-dns/external-dns:v0.13.5
         name: external-dns-public
 ```
 
@@ -254,7 +254,7 @@ Consult [AWS ExternalDNS setup docs](aws.md) for installation guidelines.
 In ExternalDNS containers args, make sure to specify `aws-zone-type` and `ingress-class`:
 
 ```yaml
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
@@ -281,7 +281,7 @@ spec:
         - --txt-owner-id=dev.k8s.nexus
         - --ingress-class=internal-ingress
         - --aws-zone-type=private
-        image: registry.k8s.io/external-dns/external-dns:v0.13.4
+        image: registry.k8s.io/external-dns/external-dns:v0.13.5
         name: external-dns-private
 ```
 
