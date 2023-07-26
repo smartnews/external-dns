@@ -306,6 +306,7 @@ func (c *Controller) ShouldRunOnce(now time.Time) bool {
 
 // Run runs RunOnce in a loop with a delay until context is canceled
 func (c *Controller) Run(ctx context.Context) {
+	// TODO: Why not just create the ticker with `c.Interval` time
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
