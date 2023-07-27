@@ -38,6 +38,10 @@ import (
 
 const (
 	defaultTargetsCapacity = 10
+	// NLBDualstackAnnotationKey is the annotation used for determining if an NLB svc is dualstack
+	NLBDualstackAnnotationKey = "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
+	// NLBDualstackAnnotationValue is the value of the NLB dualstack annotation that indicates it is dualstack
+	NLBDualstackAnnotationValue = "dualstack"
 )
 
 // serviceSource is an implementation of Source for Kubernetes service objects.
@@ -460,8 +464,8 @@ func (sc *serviceSource) setResourceLabel(service *v1.Service, endpoints []*endp
 }
 
 func (sc *serviceSource) setDualstackLabel(service *v1.Service, endpoints []*endpoint.Endpoint) {
-	val, ok := service.Annotations[ALBDualstackAnnotationKey]
-	if ok && val == ALBDualstackAnnotationValue {
+	val, ok := service.Annotations[NLBDualstackAnnotationKey]
+	if ok && val == NLBDualstackAnnotationValue {
 		log.Debugf("Adding dualstack label to service %s/%s.", service.Namespace, service.Name)
 		for _, ep := range endpoints {
 			ep.Labels[endpoint.DualstackLabelKey] = "true"
