@@ -710,7 +710,7 @@ func (p *AWSSDProvider) serviceTypeFromEndpoint(ep *endpoint.Endpoint) string {
 		}
 		return sd.RecordTypeCname
 	} else if ep.RecordType == endpoint.RecordTypeAAAA {
-            return sd.RecordTypeAAAA
+            return sd.RecordTypeAaaa
         }
 	return sd.RecordTypeA
 }
