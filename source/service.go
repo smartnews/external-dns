@@ -63,6 +63,17 @@ type serviceSource struct {
 	labelSelector                  labels.Selector
 }
 
+const (
+	// nlbDualstackAnnotationKey is the annotation used for determining if an NLB svc is dualstack
+	nlbDualstackAnnotationKey = "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
+	// nlbDualstackAnnotationValue is the value of the NLB dualstack annotation that indicates it is dualstack
+	nlbDualstackAnnotationValue = "dualstack"
+	// nlbCreateAaaaRecordAnnotationKey is the annotation used for determining if an AAAA record should be created for an NLB
+	nlbCreateAaaaRecordAnnotationKey = "service.spaas.smartnews.net/create-aaaa-record"
+	// nlbDisableAaaaRecordAnnotationValue is the value of the NLB AAAA annotation that indicates it should not create an AAAA record
+	nlbDisableAaaaRecordAnnotationValue = "false"
+)
+
 // NewServiceSource creates a new serviceSource with the given config.
 func NewServiceSource(ctx context.Context, kubeClient kubernetes.Interface, namespace, annotationFilter string, fqdnTemplate string, combineFqdnAnnotation bool, compatibility string, publishInternal bool, publishHostIP bool, alwaysPublishNotReadyAddresses bool, serviceTypeFilter []string, ignoreHostnameAnnotation bool, labelSelector labels.Selector, resolveLoadBalancerHostname bool) (Source, error) {
 	tmpl, err := parseTemplate(fqdnTemplate)
@@ -197,6 +208,7 @@ func (sc *serviceSource) Endpoints(ctx context.Context) ([]*endpoint.Endpoint, e
 
 		log.Debugf("Endpoints generated from service: %s/%s: %v", svc.Namespace, svc.Name, svcEndpoints)
 		sc.setResourceLabel(svc, svcEndpoints)
+		sc.setDualstackLabel(svc, svcEndpoints)
 		endpoints = append(endpoints, svcEndpoints...)
 	}
 
@@ -236,7 +248,6 @@ func (sc *serviceSource) Endpoints(ctx context.Context) ([]*endpoint.Endpoint, e
 	for _, ep := range endpoints {
 		sort.Sort(ep.Targets)
 	}
-
 	return endpoints, nil
 }
 
@@ -456,6 +467,19 @@ func (sc *serviceSource) filterByServiceType(services []*v1.Service) []*v1.Servi
 func (sc *serviceSource) setResourceLabel(service *v1.Service, endpoints []*endpoint.Endpoint) {
 	for _, ep := range endpoints {
 		ep.Labels[endpoint.ResourceLabelKey] = fmt.Sprintf("service/%s/%s", service.Namespace, service.Name)
+	}
+}
+
+func (sc *serviceSource) setDualstackLabel(service *v1.Service, endpoints []*endpoint.Endpoint) {
+	dualstackAnnotationValue, dualstackAnnotationExists := service.Annotations[nlbDualstackAnnotationKey]
+	if dualstackAnnotationExists && dualstackAnnotationValue == nlbDualstackAnnotationValue {
+		createAaaaAnnotationValue, createAaaaAnnotationExists := service.Annotations[nlbCreateAaaaRecordAnnotationKey]
+		if !createAaaaAnnotationExists || createAaaaAnnotationValue != nlbDisableAaaaRecordAnnotationValue {
+			log.Debugf("Adding dualstack label to service %s/%s.", service.Namespace, service.Name)
+			for _, ep := range endpoints {
+				ep.Labels[endpoint.DualstackLabelKey] = "true"
+			}
+		}
 	}
 }
 
