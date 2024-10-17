@@ -81,13 +81,13 @@ BINARY        ?= external-dns
 SOURCES        = $(shell find . -name '*.go')
 IMAGE_STAGING  = gcr.io/k8s-staging-external-dns/$(BINARY)
 REGISTRY      ?= us.gcr.io/k8s-artifacts-prod/external-dns
-IMAGE         ?= $(REGISTRY)/$(BINARY)
-VERSION       ?= $(shell git describe --tags --always --dirty --match "v*")
+IMAGE         ?= 165463520094.dkr.ecr.ap-northeast-1.amazonaws.com/ops-spaas/external-dns
+VERSION       ?= v0.14.2-patch02
 BUILD_FLAGS   ?= -v
 LDFLAGS       ?= -X sigs.k8s.io/external-dns/pkg/apis/externaldns.Version=$(VERSION) -w -s
 ARCH          ?= amd64
 SHELL          = /bin/bash
-IMG_PLATFORM  ?= linux/amd64,linux/arm64,linux/arm/v7
+IMG_PLATFORM  ?= linux/amd64,linux/arm64
 IMG_PUSH      ?= true
 IMG_SBOM      ?= none
 

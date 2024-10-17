@@ -68,6 +68,10 @@ const (
 	nlbDualstackAnnotationKey = "service.beta.kubernetes.io/aws-load-balancer-ip-address-type"
 	// nlbDualstackAnnotationValue is the value of the NLB dualstack annotation that indicates it is dualstack
 	nlbDualstackAnnotationValue = "dualstack"
+	// nlbCreateAaaaRecordAnnotationKey is the annotation used for determining if an AAAA record should be created for an NLB
+	nlbCreateAaaaRecordAnnotationKey = "service.spaas.smartnews.net/create-aaaa-record"
+	// nlbDisableAaaaRecordAnnotationValue is the value of the NLB AAAA annotation that indicates it should not create an AAAA record
+	nlbDisableAaaaRecordAnnotationValue = "false"
 )
 
 // NewServiceSource creates a new serviceSource with the given config.
@@ -467,11 +471,14 @@ func (sc *serviceSource) setResourceLabel(service *v1.Service, endpoints []*endp
 }
 
 func (sc *serviceSource) setDualstackLabel(service *v1.Service, endpoints []*endpoint.Endpoint) {
-	val, ok := service.Annotations[nlbDualstackAnnotationKey]
-	if ok && val == nlbDualstackAnnotationValue {
-		log.Debugf("Adding dualstack label to service %s/%s.", service.Namespace, service.Name)
-		for _, ep := range endpoints {
-			ep.Labels[endpoint.DualstackLabelKey] = "true"
+	dualstackAnnotationValue, dualstackAnnotationExists := service.Annotations[nlbDualstackAnnotationKey]
+	if dualstackAnnotationExists && dualstackAnnotationValue == nlbDualstackAnnotationValue {
+		createAaaaAnnotationValue, createAaaaAnnotationExists := service.Annotations[nlbCreateAaaaRecordAnnotationKey]
+		if !createAaaaAnnotationExists || createAaaaAnnotationValue != nlbDisableAaaaRecordAnnotationValue {
+			log.Debugf("Adding dualstack label to service %s/%s.", service.Namespace, service.Name)
+			for _, ep := range endpoints {
+				ep.Labels[endpoint.DualstackLabelKey] = "true"
+			}
 		}
 	}
 }
